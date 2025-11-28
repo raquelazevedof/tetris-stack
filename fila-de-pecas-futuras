@@ -1,0 +1,144 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>   /* CORRECAO: necessario para time() */
+
+/* tamanho fixo da fila (inicializaremos com exatamente TAM_FILA pecas) */
+#define TAM_FILA 5
+
+/* Estrutura que representa uma peca */
+typedef struct {
+    char nome;   /* Tipo da peca: I, O, T, L */
+    int id;      /* Identificador unico */
+} Peca;
+
+/* Estrutura da fila circular */
+typedef struct {
+    Peca itens[TAM_FILA];
+    int inicio;
+    int fim;
+    int quantidade;
+} Fila;
+
+/* Variavel global para gerar IDs unicos */
+int contadorID = 0;
+
+/* Gera uma peca automaticamente */
+Peca gerarPeca() {
+    char tipos[4] = {'I', 'O', 'T', 'L'};
+    Peca nova;
+
+    nova.nome = tipos[rand() % 4];
+    nova.id = contadorID++;
+
+    return nova;
+}
+
+/* Inicializa a fila com TAM_FILA pecas */
+void inicializarFila(Fila *f) {
+    f->inicio = 0;
+    f->fim = 0;
+    f->quantidade = 0;
+
+    for (int i = 0; i < TAM_FILA; i++) {
+        Peca p = gerarPeca();
+        f->itens[f->fim] = p;
+        f->fim = (f->fim + 1) % TAM_FILA;
+        f->quantidade++;
+    }
+}
+
+/* Insere uma peca no final da fila (enqueue) */
+void enqueue(Fila *f) {
+    if (f->quantidade == TAM_FILA) {
+        printf("Fila cheia! Nao foi possivel inserir nova peca.\n");
+        return;
+    }
+
+    Peca nova = gerarPeca();
+    f->itens[f->fim] = nova;
+    f->fim = (f->fim + 1) % TAM_FILA;
+    f->quantidade++;
+
+    printf("Peca inserida: [%c %d]\n", nova.nome, nova.id);
+}
+
+/* Remove a peca do inicio da fila (dequeue) */
+void dequeue(Fila *f) {
+    if (f->quantidade == 0) {
+        printf("Fila vazia! Nao ha peca para jogar.\n");
+        return;
+    }
+
+    Peca removida = f->itens[f->inicio];
+    f->inicio = (f->inicio + 1) % TAM_FILA;
+    f->quantidade--;
+
+    printf("Peca jogada: [%c %d]\n", removida.nome, removida.id);
+}
+
+/* Exibe o estado atual da fila */
+void exibirFila(const Fila *f) {
+    printf("\nFila de pecas\n");
+
+    if (f->quantidade == 0) {
+        printf("[vazia]\n");
+        return;
+    }
+
+    int i = f->inicio;
+    for (int count = 0; count < f->quantidade; count++) {
+        Peca p = f->itens[i];
+        printf("[%c %d] ", p.nome, p.id);
+        i = (i + 1) % TAM_FILA;
+    }
+    printf("\n");
+}
+
+/* Menu do jogo */
+void mostrarMenu() {
+    printf("\nOpcoes:\n");
+    printf("1 - Jogar peca (dequeue)\n");
+    printf("2 - Inserir nova peca (enqueue)\n");
+    printf("0 - Sair\n");
+    printf("Escolha: ");
+}
+
+int main(void) {
+    Fila fila;
+    int opcao;
+
+    /* inicializa gerador de numeros aleatorios */
+    srand((unsigned int) time(NULL));
+
+    inicializarFila(&fila);
+
+    while (1) {
+        exibirFila(&fila);
+        mostrarMenu();
+
+        if (scanf("%d", &opcao) != 1) {
+            /* entrada invalida: limpar buffer e continuar */
+            int c;
+            while ((c = getchar()) != '\n' && c != EOF) { }
+            printf("Entrada invalida. Tente novamente.\n");
+            continue;
+        }
+
+        switch (opcao) {
+            case 1:
+                dequeue(&fila);
+                break;
+            case 2:
+                enqueue(&fila);
+                break;
+            case 0:
+                printf("Saindo...\n");
+                return 0;
+            default:
+                printf("Opcao invalida!\n");
+                break;
+        }
+    }
+
+    return 0;
+}
