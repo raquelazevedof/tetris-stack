@@ -1,3 +1,14 @@
+/*
+  Tetris Stack - Gerenciador de pecas (fila circular + pilha)
+  - Fila com capacidade 5 (TAM_FILA)
+  - Pilha com capacidade 3 (TAM_PILHA)
+  - Operacoes: jogar (dequeue), reservar (fila->pilha), usar reservada (pop),
+               trocar frente<->topo, troca 3x3 (primeiros 3 da fila <-> 3 da pilha)
+  - A cada remocao da fila (jogar ou reservar) eh gerada automaticamente
+    uma nova peca e inserida no fim da fila para manter a fila cheia quando possivel.
+  - Pecas tem 'nome' (I,O,T,L) e 'id' unico (contador global).
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -5,193 +16,340 @@
 #define TAM_FILA 5
 #define TAM_PILHA 3
 
-/* Estrutura da peca */
+/* Representacao de uma peca */
 typedef struct {
-    char nome;
-    int id;
+    char nome; /* I, O, T, L */
+    int id;    /* id unico */
 } Peca;
 
-/* Estrutura da fila circular */
+/* Fila circular */
 typedef struct {
     Peca itens[TAM_FILA];
-    int inicio;
-    int fim;
-    int quantidade;
+    int inicio;     /* indice do primeiro elemento */
+    int fim;        /* indice do proximo local de insercao */
+    int quantidade; /* numero atual de elementos */
 } Fila;
 
-/* Estrutura da pilha */
+/* Pilha estatica */
 typedef struct {
     Peca itens[TAM_PILHA];
-    int topo;
+    int topo; /* indice do topo, -1 se vazia */
 } Pilha;
 
-/* Contador global para gerar IDs unicos */
+/* contador global para ids */
 int contadorID = 0;
 
-/* Gera uma peca aleatoria */
+/* gera uma peca aleatoria */
 Peca gerarPeca() {
-    char tipos[4] = {'I', 'O', 'T', 'L'};
+    char tipos[4] = {'I','O','T','L'};
     Peca p;
     p.nome = tipos[rand() % 4];
     p.id = contadorID++;
     return p;
 }
 
-/* Inicializa a fila cheia */
+/* inicializa fila: enche com TAM_FILA pecas geradas automaticamente */
 void inicializarFila(Fila *f) {
     f->inicio = 0;
     f->fim = 0;
     f->quantidade = 0;
-
-    for (int i = 0; i < TAM_FILA; i++) {
-        f->itens[f->fim] = gerarPeca();
+    for (int i = 0; i < TAM_FILA; ++i) {
+        Peca p = gerarPeca();
+        f->itens[f->fim] = p;
         f->fim = (f->fim + 1) % TAM_FILA;
         f->quantidade++;
     }
 }
 
-/* Inicializa a pilha vazia */
+/* inicializa pilha vazia */
 void inicializarPilha(Pilha *p) {
     p->topo = -1;
 }
 
-/* Enfileira uma nova peca */
-void enqueue(Fila *f, Peca p) {
-    if (f->quantidade == TAM_FILA) {
-        return; /* nunca deve ocorrer, fila sempre cheia apenas depois de remover */
-    }
-    f->itens[f->fim] = p;
+/* verificadores */
+int filaVazia(const Fila *f) { return f->quantidade == 0; }
+int filaCheia(const Fila *f)  { return f->quantidade == TAM_FILA; }
+int pilhaVazia(const Pilha *p) { return p->topo == -1; }
+int pilhaCheia(const Pilha *p)  { return p->topo == TAM_PILHA - 1; }
+
+/* enqueue: insere peca no fim da fila (assume espaco disponivel) */
+int enqueue(Fila *f, Peca x) {
+    if (filaCheia(f)) return 0;
+    f->itens[f->fim] = x;
     f->fim = (f->fim + 1) % TAM_FILA;
     f->quantidade++;
+    return 1;
 }
 
-/* Remove peca da fila (dequeue) */
-Peca dequeue(Fila *f) {
-    Peca removida = f->itens[f->inicio];
+/* dequeue: remove e retorna a peca do inicio da fila (assume nao vazia) */
+int dequeue(Fila *f, Peca *out) {
+    if (filaVazia(f)) return 0;
+    if (out) *out = f->itens[f->inicio];
     f->inicio = (f->inicio + 1) % TAM_FILA;
     f->quantidade--;
-    return removida;
+    return 1;
 }
 
-/* Empilha uma peca */
+/* push na pilha */
 int push(Pilha *p, Peca x) {
-    if (p->topo == TAM_PILHA - 1) {
-        return 0; /* pilha cheia */
-    }
+    if (pilhaCheia(p)) return 0;
     p->topo++;
     p->itens[p->topo] = x;
     return 1;
 }
 
-/* Desempilha */
-int pop(Pilha *p, Peca *recebida) {
-    if (p->topo == -1) {
-        return 0; /* vazia */
-    }
-    *recebida = p->itens[p->topo];
+/* pop da pilha */
+int pop(Pilha *p, Peca *out) {
+    if (pilhaVazia(p)) return 0;
+    if (out) *out = p->itens[p->topo];
     p->topo--;
     return 1;
 }
 
-/* Exibe fila e pilha */
-void exibirEstado(Fila *f, Pilha *p) {
+/* mostra estado atual: fila e pilha */
+void exibirEstado(const Fila *f, const Pilha *p) {
     printf("\nEstado atual:\n");
 
-    /* Fila */
+    /* fila */
     printf("Fila de pecas: ");
-    int i = f->inicio;
-    for (int c = 0; c < f->quantidade; c++) {
-        printf("[%c %d] ", f->itens[i].nome, f->itens[i].id);
-        i = (i + 1) % TAM_FILA;
+    if (filaVazia(f)) {
+        printf("[vazia]");
+    } else {
+        int idx = f->inicio;
+        for (int c = 0; c < f->quantidade; ++c) {
+            Peca q = f->itens[idx];
+            printf("[%c %d] ", q.nome, q.id);
+            idx = (idx + 1) % TAM_FILA;
+        }
     }
     printf("\n");
 
-    /* Pilha */
+    /* pilha (Topo -> Base) */
     printf("Pilha de reserva (Topo -> Base): ");
-    if (p->topo == -1) {
+    if (pilhaVazia(p)) {
         printf("[vazia]");
     } else {
-        for (int i = p->topo; i >= 0; i--) {
-            printf("[%c %d] ", p->itens[i].nome, p->itens[i].id);
+        for (int i = p->topo; i >= 0; --i) {
+            Peca s = p->itens[i];
+            printf("[%c %d] ", s.nome, s.id);
         }
     }
     printf("\n");
 }
 
-/* Menu */
-void menu() {
-    printf("\nOpcoes:\n");
-    printf("1 - Jogar peca\n");
-    printf("2 - Reservar peca\n");
-    printf("3 - Usar peca reservada\n");
-    printf("0 - Sair\n");
-    printf("Escolha: ");
+/* acao 1: jogar peca (dequeue). apos remover, gera nova peca e enfileira para repor. */
+void acaoJogar(Fila *f) {
+    if (filaVazia(f)) {
+        printf("Nao ha peca para jogar. Fila vazia.\n");
+        return;
+    }
+    Peca jogada;
+    dequeue(f, &jogada);
+    printf("Peca jogada: [%c %d]\n", jogada.nome, jogada.id);
+    /* gera nova peca e enfileira (deve haver espaco, pois acabamos de remover 1) */
+    Peca nova = gerarPeca();
+    if (!enqueue(f, nova)) {
+        /* caso improvavel: se nao houver espaco, apenas ignorar (na pratica nao ocorre) */
+        printf("Aviso: nao foi possivel repor nova peca na fila.\n");
+    } else {
+        printf("Nova peca gerada e inserida no fim da fila: [%c %d]\n", nova.nome, nova.id);
+    }
 }
 
-int main() {
+/* acao 2: reservar peca (mover frente da fila para o topo da pilha) e repor fila */
+void acaoReservar(Fila *f, Pilha *p) {
+    if (filaVazia(f)) {
+        printf("Nao ha peca para reservar. Fila vazia.\n");
+        return;
+    }
+    if (pilhaCheia(p)) {
+        printf("Nao foi possivel reservar: pilha cheia.\n");
+        return;
+    }
+    Peca frente;
+    dequeue(f, &frente);   /* retira da fila */
+    if (!push(p, frente)) { /* tentativa de empilhar */
+        /* devolve a peca para a frente (reverter) */
+        /* para devolver com seguranca, movemos elementos: simplificamos enfileirando no fim,
+           mas isto nao restaura a posicao original no caso improvavel de falha. */
+        printf("Erro ao empilhar peca. Operacao revertedida.\n");
+        /* tentar enfileirar de novo (melhor alternativa que nada) */
+        enqueue(f, frente);
+        return;
+    }
+    printf("Peca reservada: [%c %d]\n", frente.nome, frente.id);
+
+    /* gera nova peca e enfileira para repor fila */
+    Peca nova = gerarPeca();
+    if (!enqueue(f, nova)) {
+        printf("Aviso: nao foi possivel repor nova peca na fila apos reservar.\n");
+    } else {
+        printf("Nova peca gerada e inserida no fim da fila: [%c %d]\n", nova.nome, nova.id);
+    }
+}
+
+/* acao 3: usar peca reservada (desempilhar) */
+void acaoUsarReservada(Pilha *p) {
+    if (pilhaVazia(p)) {
+        printf("Nao ha peca reservada para usar. Pilha vazia.\n");
+        return;
+    }
+    Peca usada;
+    pop(p, &usada);
+    printf("Peca usada (removida da pilha): [%c %d]\n", usada.nome, usada.id);
+    /* seguiu instrucao: pecas removidas nao voltam para o jogo */
+}
+
+/* acao 4: trocar peca da frente da fila com o topo da pilha */
+void acaoTrocarFrenteTopo(Fila *f, Pilha *p) {
+    if (filaVazia(f)) {
+        printf("Troca falhou: fila vazia.\n");
+        return;
+    }
+    if (pilhaVazia(p)) {
+        printf("Troca falhou: pilha vazia.\n");
+        return;
+    }
+
+    /* indices e copias */
+    int idxFrente = f->inicio;
+    Peca frente = f->itens[idxFrente];
+    Peca topo = p->itens[p->topo];
+
+    /* efetua troca simples */
+    f->itens[idxFrente] = topo;
+    p->itens[p->topo] = frente;
+
+    printf("Troca efetuada entre frente da fila e topo da pilha:\n");
+    printf("  Frente agora: [%c %d]\n", f->itens[idxFrente].nome, f->itens[idxFrente].id);
+    printf("  Topo agora:   [%c %d]\n", p->itens[p->topo].nome, p->itens[p->topo].id);
+}
+
+/* acao 5: trocar os 3 primeiros da fila com as 3 pecas da pilha (se ambos tiverem >=3)
+   Regra de ordem:
+   - iremos remover (dequeue) os 3 primeiros da fila na ordem A0,A1,A2 (A0 era frente)
+   - iremos pop 3 da pilha na ordem B0,B1,B2 (B0 era topo, B2 era base da top3)
+   - inserimos na fila os B0,B1,B2 respectivamente (mantendo a ordem topo->base nos primeiros 3 da fila)
+   - empilhamos na pilha na ordem A0,A1,A2 (assim o topo depois sera A2, como no exemplo)
+*/
+void acaoTroca3x3(Fila *f, Pilha *p) {
+    if (f->quantidade < 3) {
+        printf("Troca 3x3 falhou: fila nao possui 3 pecas.\n");
+        return;
+    }
+    if (p->topo + 1 < 3) {
+        printf("Troca 3x3 falhou: pilha nao possui 3 pecas.\n");
+        return;
+    }
+
+    /* buffers temporarios */
+    Peca bufFila[3];
+    Peca bufPilha[3];
+
+    /* retirar 3 da fila (em ordem frente -> proximo -> proximo) */
+    for (int i = 0; i < 3; ++i) {
+        dequeue(f, &bufFila[i]); /* bufFila[0] era frente original */
+    }
+
+    /* retirar 3 da pilha (pop 3 vezes: bufPilha[0] = topo original) */
+    for (int i = 0; i < 3; ++i) {
+        pop(p, &bufPilha[i]); /* bufPilha[0] = top original, bufPilha[2] = base dentre os 3 */
+    }
+
+    /* inserir os 3 da pilha na fila na ordem bufPilha[0], bufPilha[1], bufPilha[2]
+       assim os primeiros 3 da fila ficam (topo->base) na mesma ordem que estavam na pilha */
+    for (int i = 0; i < 3; ++i) {
+        if (!enqueue(f, bufPilha[i])) {
+            /* falha improvavel: tentar reverter o que foi feito */
+            printf("Erro: nao foi possivel enfileirar durante troca 3x3. Operacao abortada.\n");
+            /* tentativa simples de restaurar: enfileirar os elementos restantes de bufFila (se houver) */
+            /* Nota: operacao de restauracao nao garante estado exatamente original em todos os erros raros */
+            for (int j = 0; j < 3; ++j) enqueue(f, bufFila[j]);
+            /* empilhar de volta os itens que ja havian sido retirados da pilha */
+            for (int j = i-1; j >= 0; --j) push(p, bufPilha[j]);
+            return;
+        }
+    }
+
+    /* empilhar na pilha os 3 itens vindos da fila (bufFila[0], bufFila[1], bufFila[2])
+       empilhamos nessa ordem para que o topo final seja bufFila[2], tal como no exemplo */
+    for (int i = 0; i < 3; ++i) {
+        if (!push(p, bufFila[i])) {
+            /* falha improvavel: tentar reverter parcialmente (na pratica nao ocorre) */
+            printf("Erro: nao foi possivel empilhar durante troca 3x3. Operacao parcialmente realizada.\n");
+            return;
+        }
+    }
+
+    printf("Troca 3x3 realizada entre os 3 primeiros da fila e as 3 pecas da pilha.\n");
+}
+
+/* print do menu e leitura segura de opcao */
+int lerOpcao() {
+    int opc;
+    printf("\nOpcoes disponiveis:\n");
+    printf("1 - Jogar peca da frente da fila\n");
+    printf("2 - Enviar peca da fila para a pilha de reserva\n");
+    printf("3 - Usar peca da pilha de reserva\n");
+    printf("4 - Trocar peca da frente da fila com o topo da pilha\n");
+    printf("5 - Trocar os 3 primeiros da fila com as 3 pecas da pilha\n");
+    printf("0 - Sair\n");
+    printf("Escolha: ");
+    if (scanf("%d", &opc) != 1) {
+        /* limpar buffer de entrada */
+        int c;
+        while ((c = getchar()) != '\n' && c != EOF) { }
+        return -1;
+    }
+    return opc;
+}
+
+int main(void) {
     Fila fila;
     Pilha pilha;
     int opcao;
 
-    srand(time(NULL));
-
+    /* inicializa aleatorio e estruturas */
+    srand((unsigned int) time(NULL));
     inicializarFila(&fila);
     inicializarPilha(&pilha);
 
+    printf("Tetris Stack - Gerenciador de pecas (fila + pilha)\n");
+
+    /* loop principal */
     while (1) {
         exibirEstado(&fila, &pilha);
-        menu();
-        scanf("%d", &opcao);
+        opcao = lerOpcao();
+
+        if (opcao == -1) {
+            printf("Entrada invalida. Tente novamente.\n");
+            continue;
+        }
 
         if (opcao == 0) {
-            printf("Saindo...\n");
+            printf("Encerrando programa. Ate logo!\n");
             break;
         }
 
         switch (opcao) {
-
-        /* Jogar peca (dequeue) */
-        case 1: {
-            Peca jogada = dequeue(&fila);
-            printf("Peca jogada: [%c %d]\n", jogada.nome, jogada.id);
-
-            /* repoe nova peca automaticamente */
-            enqueue(&fila, gerarPeca());
-            break;
-        }
-
-        /* Reservar peca (move da fila para a pilha) */
-        case 2: {
-            if (pilha.topo == TAM_PILHA - 1) {
-                printf("A pilha esta cheia! Nao e possivel reservar.\n");
+            case 1:
+                acaoJogar(&fila);
                 break;
-            }
-
-            Peca reservada = dequeue(&fila);
-            push(&pilha, reservada);
-
-            printf("Peca reservada: [%c %d]\n", reservada.nome, reservada.id);
-
-            /* repoe nova peca na fila */
-            enqueue(&fila, gerarPeca());
-            break;
-        }
-
-        /* Usar peca reservada (pop) */
-        case 3: {
-            Peca usada;
-
-            if (!pop(&pilha, &usada)) {
-                printf("A pilha esta vazia! Nao ha peca reservada.\n");
+            case 2:
+                acaoReservar(&fila, &pilha);
                 break;
-            }
-
-            printf("Peca usada: [%c %d]\n", usada.nome, usada.id);
-            break;
-        }
-
-        default:
-            printf("Opcao invalida!\n");
+            case 3:
+                acaoUsarReservada(&pilha);
+                break;
+            case 4:
+                acaoTrocarFrenteTopo(&fila, &pilha);
+                break;
+            case 5:
+                acaoTroca3x3(&fila, &pilha);
+                break;
+            default:
+                printf("Opcao invalida. Digite um codigo valido.\n");
+                break;
         }
     }
 
